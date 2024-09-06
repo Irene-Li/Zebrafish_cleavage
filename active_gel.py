@@ -116,7 +116,7 @@ class ActiveGel2D(ActiveGel):
         self.res = solve_ivp(self._rhs, (0, self.T), self.initial_state, t_eval=t_span, method='RK45', rtol=1e-5)
         evo = self.res.y.reshape((3, self.L, self.L, self.n_frames))
         self.Q, self.q, self.rho = np.rollaxis(evo, -1, 1)
-        self.v = list(map(self._solve_for_v, t_span, self.rho, self.Q, self.q))
+        self.v = np.array(list(map(self._solve_for_v, t_span, self.rho, self.Q, self.q)))
         
     def _set_M(self):
         k = np.fft.fftfreq(self.L)*2*np.pi
