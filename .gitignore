@@ -8,3 +8,6 @@
 /Test data
 data/rep3_flow1/rep7_flow1_xy.npy
 /data
+*.png
+/figures
+/notebooks/sim_data

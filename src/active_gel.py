@@ -64,9 +64,7 @@ class ActiveGel():
                 
     def _rhs(self, t, y):
         Q, rho = y.reshape((2, self.L))
-        
-        Qx = self._dx(Q)
-        
+                
         # solve for v
         vx = self._solve_for_v(t, rho, Q)
         vxx = self._dx(vx)
@@ -121,9 +119,9 @@ class ActiveGel2D(ActiveGel):
     def _set_M(self):
         k = np.fft.fftfreq(self.L)*2*np.pi
         kx, ky = np.meshgrid(k, k, indexing='ij')
-        Mxx = - (self.eta0+self.eta1)*kx*kx - self.eta0*ky*ky - self.gamma # compression, screened by friction  
-        Mxy = - self.eta1*kx*ky  
-        Myy = - (self.eta0+self.eta1)*ky*ky - self.eta0*kx*kx - self.gamma # compression, screened by friction 
+        Mxx = (self.eta0+self.eta1)*kx*kx + self.eta0*ky*ky + self.gamma # compression, screened by friction  
+        Mxy = self.eta1*kx*ky  
+        Myy = (self.eta0+self.eta1)*ky*ky + self.eta0*kx*kx + self.gamma # compression, screened by friction 
         A = np.stack([Mxx, Mxy, Mxy, Myy], axis=-1).reshape((self.L, self.L, 2, 2)).astype('complex')
         self.M = np.linalg.inv(A)
         self.ik = 1j*np.stack([kx, ky], axis=-1)
