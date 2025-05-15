@@ -44,15 +44,15 @@ class ActiveGel():
         
     def _set_M(self):
         kx = np.fft.fftfreq(self.L)*2*np.pi
-        Mxx = - (self.eta0+self.eta1)*kx*kx - self.gamma # compression, screened by friction  
+        Mxx = (self.eta0+self.eta1)*kx*kx + self.gamma # compression, screened by friction  
         self.M = 1/Mxx
         self.ik = 1j*kx
 
     def _solve_for_v(self, t, rho, Q): 
-        P = self.xi*self.source(t)*rho*4/(1+rho)
+        P = self.xi*self.source(t)*rho*2/(1+rho)
         Pk = np.fft.fft(P)
         
-        Qk = np.fft.fft(Q*rho*2/(1+rho))
+        Qk = np.fft.fft(Q*rho*2/(1+rho)*self.source(t))
         # coupling, ik P + ik_j Q_{ij} 
         
         t1 = self.ik*Pk
@@ -148,11 +148,6 @@ class ActiveGel2D(ActiveGel):
                 
     def _rhs(self, t, y):
         Q, q, rho = y.reshape((3, self.L, self.L))
-        
-        Qx = self._dx(Q)
-        Qy = self._dy(Q)
-        qx = self._dx(q)
-        qy = self._dy(q)
         
         # solve for v
         vx, vy = self._solve_for_v(t, rho, Q, q)
