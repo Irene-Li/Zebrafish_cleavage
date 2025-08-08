@@ -48,6 +48,8 @@ def dtheta_dt(theta, phi, params):
     b = dG_dtheta(theta, phi, k) 
     c = (dG_dphi(theta, phi, k) - 2*k/np.pi)*phi_dot*(1 - jnp.tanh(100*(phi-np.pi/2*0.9)))/2
 
+    a = jnp.where(jnp.abs(a) < 1e-10, 1e-10, a)
+
     discriminant = b**2 - 4*a*c
     root1 = (-jnp.sqrt(discriminant) - b)/(2*a)
     root2 = (jnp.sqrt(discriminant) - b)/(2*a)

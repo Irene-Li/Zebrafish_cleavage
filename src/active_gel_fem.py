@@ -78,7 +78,7 @@ class NematicActiveGel2D:
         
     def _setup_function_spaces(self):
         """Set up the function spaces for velocity, nematic order and density fields."""
-        self.V = VectorH1(self.mesh, order=2, dirichlet="right|left|up|down")  # velocity field
+        self.V = VectorH1(self.mesh, order=3, dirichlet="right|left|up|down")  # velocity field
         self.R = H1(self.mesh, order=2)  # density field
 
         self.Q = H1(self.mesh, order=2) #Qxx
@@ -234,6 +234,8 @@ class NematicActiveGel2D:
                 
                 self.gfu.vec.data -= tau * self.inv * res
 
+                # self.velocity.components[1].Set(0)
+
                 if i % save_interval == 0:                    
                     self.gfut.AddMultiDimComponent(self.gfu.vec)                
                 t += tau
@@ -346,14 +348,14 @@ class NematicActiveGel1D(NematicActiveGel2D):
                   + (- self.Qsq(self.time) / self.beta2 * Q_trial) * Q_test * dx  
                   + self.beta1/2 * v_trial * grad(Q_test) * dx)
         
-        return force_bal + lhs_rho_time + Q_time
+        return lhs_rho_time + Q_time - force_bal 
     
 
     def _setup_nonlinear_form(self, functions): 
         (v_trial, rho_trial, Q_trial), (v_test,rho_test,Q_test) = functions 
 
         # advection term for density 
-        advection_rho = (grad(rho_trial)*v_trial * rho_test * dx + 
+        advection_rho = (grad(rho_trial) * v_trial * rho_test * dx + 
                           rho_trial * grad(v_trial) * rho_test * dx)
         
         # nonlinear term in force balance equation 
@@ -366,7 +368,7 @@ class NematicActiveGel1D(NematicActiveGel2D):
         # higher order terms in the nematic equation 
         Q_hot = 1/self.beta2 * Q_test * Q_trial * Q_trial * Q_trial * dx  
                 
-        return advection_rho + force_bal+ Q_hot + Q_adv
+        return advection_rho - force_bal + Q_hot + Q_adv
     
     def _setup_linear_form(self, functions): 
         _, (_,rho_test,_,) = functions 
