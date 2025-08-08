@@ -2,6 +2,7 @@ import numpy as np
 import cv2
 import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
+import matplotlib.animation as animation
 import os
 
 # ---------------------------------------------------------------------------
@@ -144,7 +145,65 @@ def visualize_vector_field(vector_field, height, width, vmin, vmax,
     
     return background_bgr
 
+def animate_active_gel(density_frames, velocity_frames, nematic_frames, 
+                               N, n_samples, filename="output_sim.gif",
+                               fps=10, dpi=100, stride=3):
+    """
+    Parameters:
+    -----------
+    density_frames : list of 2D arrays
+        List of density field frames
+    velocity_frames : list of (vx, vy) tuples
+        List of velocity field component frames
+    nematic_frames : list of (nx, ny) tuples
+        List of nematic order field component frames
+    N : Number of frames
+    n_samples : Number of samples.
+    --------
+    """
+    X = np.linspace(0, 1, n_samples)
+    Y = np.linspace(0, 1, n_samples)
+    X, Y = np.meshgrid(X, Y)
 
+    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+    def update(frame_idx):
+        for ax in axes:
+            ax.clear()
+            ax.set_xticks([])
+            ax.set_yticks([])
+
+        # Density
+        rho = density_frames[frame_idx]
+        im0 = axes[0].contourf(X, Y, rho, levels=100, cmap='viridis')
+        axes[0].set_title('Density')
+
+        # Velocity
+        vx = velocity_frames[frame_idx, ..., 0]
+        vy = velocity_frames[frame_idx, ..., 1]
+        vmag = np.sqrt(vx**2 + vy**2)
+        im1 = axes[1].contourf(X, Y, vmag, levels=100, cmap='viridis')
+        axes[1].quiver(X[::stride, ::stride], Y[::stride, ::stride],
+                       (vx/vmag)[::stride, ::stride], (vy/vmag)[::stride, ::stride],
+                       color='orange', width=0.003, headwidth=4, headlength=5, headaxislength=7)
+        axes[1].set_title('Velocity')
+
+        # Nematic field
+        nx = nematic_frames[frame_idx, ..., 0]
+        ny = nematic_frames[frame_idx, ..., 1]
+        nmag = np.sqrt(nx**2 + ny**2)
+        im2 = axes[2].contourf(X, Y, nmag, levels=100, cmap='viridis')
+        axes[2].quiver(X[::stride, ::stride], Y[::stride, ::stride],
+                       (nx/nmag)[::stride, ::stride], (ny/nmag)[::stride, ::stride],
+                       color='orange', width=0.003, headlength=0, headaxislength=0)
+        axes[2].set_title('Nematic order')
+
+        return [im0, im1, im2]
+
+    ani = animation.FuncAnimation(fig, update, frames=N, blit=False)
+    ani.save(filename, fps=fps, dpi=dpi)
+    plt.close(fig)
+                                   
 def create_active_gel_video(density_frames, velocity_frames, nematic_frames, 
                             output_file='active_gel_simulation.mp4', fps=30, skip=5,
                             vector_scale=1.0, arrow_width=1):
