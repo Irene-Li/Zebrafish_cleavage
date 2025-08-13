@@ -11,3 +11,5 @@ data/rep3_flow1/rep7_flow1_xy.npy
 *.png
 /figures
 /notebooks/sim_data
+/notebooks/archive
+/.vscode
