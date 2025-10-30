@@ -5,7 +5,7 @@ Installation:\
 Each notebook can be downloaded individually.\
  \
 Demo:\
-The example run of the codes are already in the noteboo files.\
+The example run of the codes are already in the notebook files.\
 \
 Instructions for use:\
 The annotations in the codes are clear enough to follow.
