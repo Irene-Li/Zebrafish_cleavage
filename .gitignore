@@ -6,10 +6,12 @@
 *.mp4
 /Xin data
 /Test data
-data/rep3_flow1/rep7_flow1_xy.npy
-/data
 *.png
 /figures
 /notebooks/sim_data
 /notebooks/archive
 /.vscode
+/data/opening_angles
+/data/membrane-actin
+/data/height_map
+/data/actin_flow*
