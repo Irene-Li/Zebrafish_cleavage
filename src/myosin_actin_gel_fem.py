@@ -75,6 +75,16 @@ class MyosinActinGel2D(NematicActiveGel2D):
                 + self._density_bilinear(m_trial,   m_test,   k=self.k_m,   D=self.D_m)
                 + self._nematic_bilinear(v_trial, Q_trial, Q_test, q_trial, q_test))
 
+    def _active_stress_nonlinear(self, v_trial, rho_trial, Q_trial, v_test, q_trial=None, m_trial=None):
+        """Active stress scaled by rho*m (myosin provides the motor activity)."""
+        s = rho_trial * m_trial * 2 / (rho_trial + 1)
+        if self.mesh.dim == 1:
+            return (self.chi0 * s * grad(v_test) * dx
+                    + self.chi1 * s * Q_trial * grad(v_test) * dx)
+        return (self.chi0 * s * div(v_test) * dx
+                + self.chi1 * s * (Q_trial * grad(v_test)[0, 0] + q_trial * grad(v_test)[1, 0]) * dx
+                + self.chi1 * s * (-Q_trial * grad(v_test)[1, 1] + q_trial * grad(v_test)[0, 1]) * dx)
+
     def _setup_nonlinear_form(self, functions):
         if self.mesh.dim == 1:
             (v_trial, rho_trial, m_trial, Q_trial), (v_test, rho_test, m_test, Q_test) = functions
@@ -84,13 +94,13 @@ class MyosinActinGel2D(NematicActiveGel2D):
                     + self._advection_nonlinear(m_trial, v_trial, m_test)
                     + self._nematic_hot_nonlinear(Q_trial, Q_test)
                     + self._nematic_advection_nonlinear(v_trial, Q_trial, Q_test)
-                    - self._active_stress_nonlinear(v_trial, rho_trial, Q_trial, v_test))
+                    - self._active_stress_nonlinear(v_trial, rho_trial, Q_trial, v_test, m_trial=m_trial))
         (v_trial, rho_trial, m_trial, Q_trial, q_trial), (v_test, rho_test, m_test, Q_test, q_test) = functions
         coupling = self.k1 * m_trial * rho_trial * rho_test * dx
         return (self._advection_nonlinear(rho_trial, v_trial, rho_test)
                 + coupling
                 + self._advection_nonlinear(m_trial, v_trial, m_test)
-                + self._active_stress_nonlinear(v_trial, rho_trial, Q_trial, v_test, q_trial)
+                + self._active_stress_nonlinear(v_trial, rho_trial, Q_trial, v_test, q_trial, m_trial=m_trial)
                 + self._nematic_hot_nonlinear(Q_trial, Q_test, q_trial, q_test)
                 + self._nematic_advection_nonlinear(v_trial, Q_trial, Q_test, q_trial, q_test))
 

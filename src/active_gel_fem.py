@@ -68,8 +68,13 @@ class NematicActiveGel2D:
     # -----------------------------------------------------------------------
 
     def _coeff(self, param):
-        """Return param(self.time) if callable, else param as-is."""
-        return param(self.time) if callable(param) else param
+        """Return param as-is for scalars and CoefficientFunctions;
+        call param(self.time) for Python time-dependent callables."""
+        if isinstance(param, CoefficientFunction):
+            return param
+        if callable(param):
+            return param(self.time)
+        return param
 
     # -----------------------------------------------------------------------
     # Dimension-aware building blocks
