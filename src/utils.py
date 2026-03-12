@@ -4,9 +4,42 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import Normalize
 import matplotlib.animation as animation
 import os
+from ngsolve import x, y, IfPos, CoefficientFunction, exp
 
 # ---------------------------------------------------------------------------
-# General purpose functions 
+# Source term helpers (return NGSolve CoefficientFunctions)
+# ---------------------------------------------------------------------------
+
+def rectangular_source(x0, x1, y0=None, y1=None, value=1.0):
+    """
+    Return an NGSolve CF equal to `value` inside [x0,x1] x [y0,y1] and 0 outside.
+    Omit y0, y1 for a 1D slab [x0, x1].
+    """
+    inside_x = IfPos(x - x0, IfPos(x1 - x, 1.0, 0.0), 0.0)
+    if y0 is None or y1 is None:
+        return value * inside_x
+    inside_y = IfPos(y - y0, IfPos(y1 - y, 1.0, 0.0), 0.0)
+    return value * inside_x * inside_y
+
+
+def tanh_source(center, width, value=1.0, axis='x'):
+    """
+    Return a smooth tanh-based bump profile centred at `center` with
+    characteristic width `width` along `axis` ('x' or 'y').
+
+    The profile is:  value * 0.5 * (tanh((coord - (center - width/2)) / w)
+                                   - tanh((coord - (center + width/2)) / w))
+    where w = width / 8  (controls the edge sharpness).
+    """
+    coord = x if axis == 'x' else y
+    w = width / 8
+    tanh_cf = lambda z: (exp(z) - exp(-z)) / (exp(z) + exp(-z))
+    left  = (coord - (center - width / 2)) / w
+    right = (coord - (center + width / 2)) / w
+    return value * 0.5 * (tanh_cf(left) - tanh_cf(right))
+
+# ---------------------------------------------------------------------------
+# General purpose functions
 # ---------------------------------------------------------------------------
 
 def nematic_to_vector(Q, q):
