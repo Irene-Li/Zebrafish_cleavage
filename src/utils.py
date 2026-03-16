@@ -49,7 +49,126 @@ def nematic_to_vector(Q, q):
     return np.array(n)
 
 # ---------------------------------------------------------------------------
-# Visualization functions
+# Matplotlib plot helpers
+# ---------------------------------------------------------------------------
+
+def add_cbar(ax, im, vmin, vmax, label, fontsize=13):
+    cbar = plt.colorbar(im, ax=ax, location='bottom', pad=0.1)
+    cbar.set_ticks([vmin, vmax])
+    cbar.set_ticklabels([f'{vmin:.2g}', f'{vmax:.2g}'])
+    cbar.set_label(label, fontsize=fontsize)
+    return cbar
+
+
+def plot_2d_frame(data, t=-1, fields=None, stride=4, title='',
+                  filename=None, fontsize=13):
+    """Unified 2D frame plot with configurable panels.
+
+    Parameters
+    ----------
+    data : dict
+        Export dict with keys like 'rho', 'vx', 'vy', 'Q', 'q', 'x', 'y', ...
+    t : int
+        Time-frame index (-1 = last frame).
+    fields : list of (key, label, cmap), optional
+        Each tuple defines one panel.  Special keys:
+          'v'  – velocity magnitude + normalised arrows (uses 'vx', 'vy')
+          'Q'  – nematic Q_yy (= −Q_xx) + director arrows (uses 'Q', 'q')
+        A cmap containing 'RdBu' is automatically centred at 0.
+        If *None*, auto-detected from data keys.
+    stride : int
+        Arrow sub-sampling stride.
+    title : str
+        Figure suptitle.
+    filename : str, optional
+        Save figure to this path.
+    fontsize : int
+        Colorbar label font size.
+    """
+    # --- auto-detect panels ------------------------------------------------
+    if fields is None:
+        fields = [('rho', r'$\rho$', 'inferno')]
+        if 'm' in data:
+            fields.append(('m', r'$m$ (myosin)', 'viridis'))
+        fields.append(('v', r'$|v|$', 'Reds'))
+        if 'div_v' in data:
+            fields.append(('div_v', r'$-\nabla \cdot v$', 'RdBu_r'))
+        fields.append(('Q', r'$Q_{yy}$', 'RdBu_r'))
+
+    n_panels = len(fields)
+    extent = (data['x'][0], data['x'][-1],
+              data['y'][0], data['y'][-1]) if 'x' in data else (0, 1, 0, 1)
+    Xc, Yc = (np.meshgrid(data['x'], data['y'])
+              if 'x' in data else (None, None))
+
+    fig, axes = plt.subplots(1, n_panels, figsize=(4.25 * n_panels, 4),
+                             sharex=True, sharey=True)
+    if n_panels == 1:
+        axes = [axes]
+
+    def _get(key):
+        arr = data[key]
+        return arr[t] if arr.ndim == 3 else arr
+
+    for ax, (key, label, cmap) in zip(axes, fields):
+        symmetric = 'RdBu' in cmap
+
+        if key == 'v':
+            vx, vy = _get('vx'), _get('vy')
+            vmag = np.sqrt(vx**2 + vy**2) + 1e-10 # avoid division by zero
+            im = ax.imshow(vmag.T, origin='lower', cmap=cmap, extent=extent)
+            if vmag.max() > 1e-10 and Xc is not None:
+                ax.quiver(Xc[::stride, ::stride], Yc[::stride, ::stride],
+                          (vx / vmag)[::stride, ::stride].T,
+                          (vy / vmag)[::stride, ::stride].T,
+                          scale=20, width=0.008, pivot='mid',
+                          headwidth=3, headlength=3, color='black')
+            add_cbar(ax, im, 0, round(vmag.max(), 3), label, fontsize=fontsize)
+
+        elif key == 'Q':
+            Q_f = _get('Q')
+            vmax_q = max(np.abs(Q_f).max(), 1e-6)
+            im = ax.imshow((-Q_f).T, origin='lower', cmap=cmap,
+                           extent=extent, vmin=-vmax_q, vmax=vmax_q)
+            if 'q' in data and Xc is not None:
+                q_f = _get('q')
+                nx, ny = nematic_to_vector(Q_f, q_f)
+                nmag = np.sqrt(nx**2 + ny**2) 
+                if nmag.max() > 1e-10:
+                    ax.quiver(Xc[::stride, ::stride], Yc[::stride, ::stride],
+                              (nx / nmag)[::stride, ::stride].T,
+                              (ny / nmag)[::stride, ::stride].T,
+                              scale=20, width=0.008, pivot='mid',
+                              headwidth=0, headlength=0, color='black')
+            add_cbar(ax, im, -round(vmax_q, 2), round(vmax_q, 2),
+                     label, fontsize=fontsize)
+
+        else:
+            field = _get(key)
+            if symmetric:
+                vm = max(np.abs(field).max(), 1e-6)
+                im = ax.imshow(field.T, origin='lower', cmap=cmap,
+                               extent=extent, vmin=-vm, vmax=vm)
+                add_cbar(ax, im, -round(vm, 2), round(vm, 2),
+                         label, fontsize=fontsize)
+            else:
+                im = ax.imshow(field.T, origin='lower', cmap=cmap,
+                               extent=extent, vmin=0, vmax=np.max(field))
+                add_cbar(ax, im, 0, round(np.max(field), 2),
+                         label, fontsize=fontsize)
+
+        ax.set_xticks([]); ax.set_yticks([])
+
+    if title:
+        plt.suptitle(title, y=1.02)
+    plt.tight_layout()
+    if filename is not None:
+        plt.savefig(filename, dpi=400)
+    plt.show()
+
+
+# ---------------------------------------------------------------------------
+# OpenCV-based visualization functions
 # ---------------------------------------------------------------------------
 
 def value2bgr(values, cmap_name, vmin, vmax):

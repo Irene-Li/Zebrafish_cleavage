@@ -299,7 +299,7 @@ class NematicActiveGel2D:
         N = len(self.gfut.vecs)
         Xc = np.linspace(0, self.width, n_samples)
         Yc = np.linspace(0, self.height, n_samples)
-        pts = [(y, x) for x in Xc for y in Yc]
+        pts = [(x, y) for x in Xc for y in Yc]
 
         rho_gf = GridFunction(self.gfut.components[1].space)
         v_gf   = GridFunction(self.gfut.components[0].space)

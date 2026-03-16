@@ -160,7 +160,7 @@ class MyosinActinGel2D(NematicActiveGel2D):
         N = len(self.gfut.vecs)
         Xc = np.linspace(0, self.width,  n_samples)
         Yc = np.linspace(0, self.height, n_samples)
-        pts = [(y, x) for x in Xc for y in Yc]
+        pts = [(x, y) for x in Xc for y in Yc]
 
         rho_gf = GridFunction(self.R)
         m_gf   = GridFunction(self.M_space)
