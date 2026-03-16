@@ -17,20 +17,26 @@ class MyosinActinGel2D(NematicActiveGel2D):
                  D_m=0.01,
                  k0=0.01,
                  k1=0.01,
+                 n_hill=1,
+                 m_ref=1.0,
                  **kwargs):
         """
         Coupled actin-myosin gel model:
-            d_t rho + div(v*rho) = S(x) - (k0 + k1*m)*rho + D_rho * laplacian(rho)
-            d_t m   + div(v*m)   = -k_m*(m - m0(x))       + D_m   * laplacian(m)
+            d_t rho + div(v*rho) = S(x) - (k0 + k1*H_n(m/m_ref))*rho + D_rho * laplacian(rho)
+            d_t m   + div(v*m)   = -k_m*(m - m0(x))                   + D_m   * laplacian(m)
+
+        where H_n(x) = x^n / (1 + x^n) is the Hill function of order n.
 
         Parameters (in addition to base class):
-        S    : Source term (NGSolve CF or scalar)
-        m0   : Myosin target field (NGSolve CF or scalar)
-        k_m  : Myosin relaxation rate
-        D_rho: Density diffusion coefficient
-        D_m  : Myosin diffusion coefficient
-        k0   : Baseline absorption rate  (stored as k0_abs to avoid clash with base k)
-        k1   : Myosin-dependent absorption rate
+        S      : Source term (NGSolve CF or scalar)
+        m0     : Myosin target field (NGSolve CF or scalar)
+        k_m    : Myosin relaxation rate
+        D_rho  : Density diffusion coefficient
+        D_m    : Myosin diffusion coefficient
+        k0     : Baseline absorption rate  (stored as k0_abs to avoid clash with base k)
+        k1     : Myosin-dependent absorption rate (prefactor of Hill function)
+        n_hill : Hill coefficient (cooperativity exponent)
+        m_ref  : Reference myosin concentration for half-maximal response
         """
         self.S      = S
         self.m0     = m0
@@ -39,6 +45,8 @@ class MyosinActinGel2D(NematicActiveGel2D):
         self.D_m    = D_m
         self.k0_abs = k0
         self.k1     = k1
+        self.n_hill = n_hill
+        self.m_ref  = m_ref
         super().__init__(**kwargs)
 
     def _setup_function_spaces(self):
@@ -85,10 +93,16 @@ class MyosinActinGel2D(NematicActiveGel2D):
                 + self.chi1 * s * (Q_trial * grad(v_test)[0, 0] + q_trial * grad(v_test)[1, 0]) * dx
                 + self.chi1 * s * (-Q_trial * grad(v_test)[1, 1] + q_trial * grad(v_test)[0, 1]) * dx)
 
+    def _hill(self, m_trial):
+        """Hill function H_n(m/m_ref) = (m/m_ref)^n / (1 + (m/m_ref)^n)."""
+        r = m_trial / self.m_ref
+        rn = r ** self.n_hill
+        return rn / (1 + rn)
+
     def _setup_nonlinear_form(self, functions):
         if self.mesh.dim == 1:
             (v_trial, rho_trial, m_trial, Q_trial), (v_test, rho_test, m_test, Q_test) = functions
-            coupling = self.k1 * m_trial * rho_trial * rho_test * dx
+            coupling = self.k1 * self._hill(m_trial) * rho_trial * rho_test * dx
             return (self._advection_nonlinear(rho_trial, v_trial, rho_test)
                     + coupling
                     + self._advection_nonlinear(m_trial, v_trial, m_test)
@@ -96,7 +110,7 @@ class MyosinActinGel2D(NematicActiveGel2D):
                     + self._nematic_advection_nonlinear(v_trial, Q_trial, Q_test)
                     - self._active_stress_nonlinear(v_trial, rho_trial, Q_trial, v_test, m_trial=m_trial))
         (v_trial, rho_trial, m_trial, Q_trial, q_trial), (v_test, rho_test, m_test, Q_test, q_test) = functions
-        coupling = self.k1 * m_trial * rho_trial * rho_test * dx
+        coupling = self.k1 * self._hill(m_trial) * rho_trial * rho_test * dx
         return (self._advection_nonlinear(rho_trial, v_trial, rho_test)
                 + coupling
                 + self._advection_nonlinear(m_trial, v_trial, m_test)

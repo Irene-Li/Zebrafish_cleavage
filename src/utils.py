@@ -10,29 +10,30 @@ from ngsolve import x, y, IfPos, CoefficientFunction, exp
 # Source term helpers (return NGSolve CoefficientFunctions)
 # ---------------------------------------------------------------------------
 
-def rectangular_source(x0, x1, y0=None, y1=None, value=1.0):
+
+def sharp_source(center, width, value=1.0, axis='x'):
     """
-    Return an NGSolve CF equal to `value` inside [x0,x1] x [y0,y1] and 0 outside.
-    Omit y0, y1 for a 1D slab [x0, x1].
+    Return a sharp-edged bump profile centred at `center` with width `width`
+    along `axis` ('x' or 'y').
+
+    The profile is 1 inside [center - width/2, center + width/2] and 0 outside.
     """
-    inside_x = IfPos(x - x0, IfPos(x1 - x, 1.0, 0.0), 0.0)
-    if y0 is None or y1 is None:
-        return value * inside_x
-    inside_y = IfPos(y - y0, IfPos(y1 - y, 1.0, 0.0), 0.0)
-    return value * inside_x * inside_y
+    coord = x if axis == 'x' else y
+    return value * IfPos(coord - (center - width / 2),
+                         IfPos((center + width / 2) - coord, 1.0, 0.0), 0.0)
 
 
-def tanh_source(center, width, value=1.0, axis='x'):
+def tanh_source(center, width, value=1.0, axis='x', interface_length=0.1):
     """
     Return a smooth tanh-based bump profile centred at `center` with
     characteristic width `width` along `axis` ('x' or 'y').
 
     The profile is:  value * 0.5 * (tanh((coord - (center - width/2)) / w)
                                    - tanh((coord - (center + width/2)) / w))
-    where w = width / 8  (controls the edge sharpness).
+    where w = interface_length  (controls the edge sharpness; smaller values = sharper).
     """
     coord = x if axis == 'x' else y
-    w = width / 8
+    w = interface_length
     tanh_cf = lambda z: (exp(z) - exp(-z)) / (exp(z) + exp(-z))
     left  = (coord - (center - width / 2)) / w
     right = (coord - (center + width / 2)) / w
@@ -52,15 +53,126 @@ def nematic_to_vector(Q, q):
 # Matplotlib plot helpers
 # ---------------------------------------------------------------------------
 
-def add_cbar(ax, im, vmin, vmax, label, fontsize=13):
-    cbar = plt.colorbar(im, ax=ax, location='bottom', pad=0.1)
+def add_cbar(ax, norm, cmap, vmin, vmax, label, fontsize=13):
+    """Add a static colorbar that is never auto-updated by im.set_data()."""
+    sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+    sm.set_array([])          # empty array → colorbar is independent of image data
+    cbar = plt.colorbar(sm, ax=ax, location='bottom', pad=0.02,
+                        fraction=0.04, aspect=30, shrink=0.9)
     cbar.set_ticks([vmin, vmax])
     cbar.set_ticklabels([f'{vmin:.2g}', f'{vmax:.2g}'])
-    cbar.set_label(label, fontsize=fontsize)
+    cbar.set_label(label, fontsize=fontsize, labelpad=2)
     return cbar
 
 
-def plot_2d_frame(data, t=-1, fields=None, stride=4, title='',
+def _auto_fields(data):
+    """Return a default list of (key, label, cmap) panel specs for *data*."""
+    fields = [('rho', r'$\rho$', 'inferno')]
+    if 'm' in data:
+        fields.append(('m', r'$m$ (myosin)', 'viridis'))
+    fields.append(('v', r'$|v|$', 'Reds'))
+    if 'div_v' in data:
+        fields.append(('div_v', r'$-\nabla \cdot v$', 'RdBu_r'))
+    fields.append(('Q', r'$Q_{yy}$', 'RdBu_r'))
+    return fields
+
+
+def _arrow_idx(n_size, n_arrows):
+    """Return ``n_arrows`` evenly-spaced integer indices into [0, n_size)."""
+    return np.round(np.linspace(0, n_size - 1, n_arrows)).astype(int)
+
+
+def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
+                fontsize=13, vlims=None, ix=None, iy=None):
+    """Render a single panel on *ax*.
+
+    Returns (im, qv) — the AxesImage and Quiver artists — so the animation
+    helper can update them in-place without redrawing colorbars each frame.
+
+    Parameters
+    ----------
+    n_arrows : int
+        Number of arrow grid points along each axis (gives n_arrows × n_arrows
+        evenly-spaced arrows).
+    vlims : dict, optional
+        Pre-computed ``{key: (vmin, vmax)}`` for consistent colour ranges
+        across frames (used by the animation helper).
+    ix, iy : array-like of int, optional
+        Pre-computed x/y index arrays (avoids recomputing on every animation
+        frame).  Derived from ``n_arrows`` when omitted.
+    """
+    symmetric = 'RdBu' in cmap
+    qv = None
+
+    def _get(k):
+        arr = data[k]
+        return arr[t] if arr.ndim == 3 else arr
+
+    if key == 'v':
+        vx, vy = _get('vx'), _get('vy')
+        vmag = np.sqrt(vx**2 + vy**2) + 1e-10
+        vmin_v, vmax_v = (vlims['v'] if vlims and 'v' in vlims
+                          else (0, float(vmag.max())))
+        norm = Normalize(vmin=vmin_v, vmax=vmax_v, clip=True)
+        im = ax.imshow(vmag.T, origin='lower', cmap=cmap,
+                       extent=extent, norm=norm)
+        if vmag.max() > 1e-10 and Xc is not None:
+            _ix = ix if ix is not None else _arrow_idx(vx.shape[0], n_arrows)
+            _iy = iy if iy is not None else _arrow_idx(vx.shape[1], n_arrows)
+            qv = ax.quiver(Xc[np.ix_(_iy, _ix)], Yc[np.ix_(_iy, _ix)],
+                           (vx / vmag)[np.ix_(_ix, _iy)].T,
+                           (vy / vmag)[np.ix_(_ix, _iy)].T,
+                           scale=20, width=0.008, pivot='mid',
+                           headwidth=3, headlength=3, color='black')
+        add_cbar(ax, norm, cmap, round(vmin_v, 3), round(vmax_v, 3),
+                 label, fontsize=fontsize)
+
+    elif key == 'Q':
+        Q_f = _get('Q')
+        if vlims and 'Q' in vlims:
+            vmax_q = vlims['Q'][1]
+        else:
+            vmax_q = max(float(np.abs(Q_f).max()), 1e-6)
+        norm = Normalize(vmin=-vmax_q, vmax=vmax_q, clip=True)
+        im = ax.imshow((-Q_f).T, origin='lower', cmap=cmap,
+                       extent=extent, norm=norm)
+        if 'q' in data and Xc is not None:
+            q_f = _get('q')
+            nx_vec, ny_vec = nematic_to_vector(Q_f, q_f)
+            nmag = np.sqrt(nx_vec**2 + ny_vec**2)
+            if nmag.max() > 1e-10:
+                _ix = ix if ix is not None else _arrow_idx(Q_f.shape[0], n_arrows)
+                _iy = iy if iy is not None else _arrow_idx(Q_f.shape[1], n_arrows)
+                qv = ax.quiver(
+                    Xc[np.ix_(_iy, _ix)], Yc[np.ix_(_iy, _ix)],
+                    (nx_vec / nmag)[np.ix_(_ix, _iy)].T,
+                    (ny_vec / nmag)[np.ix_(_ix, _iy)].T,
+                    scale=20, width=0.01, pivot='mid',
+                    headwidth=0, headlength=0, headaxislength=0,
+                    color='black')
+        add_cbar(ax, norm, cmap, -round(vmax_q, 2), round(vmax_q, 2),
+                 label, fontsize=fontsize)
+
+    else:
+        field = _get(key)
+        if vlims and key in vlims:
+            lo, hi = vlims[key]
+        elif symmetric:
+            vm = max(float(np.abs(field).max()), 1e-6)
+            lo, hi = -vm, vm
+        else:
+            lo, hi = 0.0, max(float(np.max(field)), 1e-6)
+        norm = Normalize(vmin=lo, vmax=hi, clip=True)
+        im = ax.imshow(field.T, origin='lower', cmap=cmap,
+                       extent=extent, norm=norm, interpolation='none')
+        add_cbar(ax, norm, cmap, round(lo, 2), round(hi, 2),
+                 label, fontsize=fontsize)
+
+    ax.set_xticks([]); ax.set_yticks([])
+    return im, qv
+
+
+def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
                   filename=None, fontsize=13):
     """Unified 2D frame plot with configurable panels.
 
@@ -76,8 +188,9 @@ def plot_2d_frame(data, t=-1, fields=None, stride=4, title='',
           'Q'  – nematic Q_yy (= −Q_xx) + director arrows (uses 'Q', 'q')
         A cmap containing 'RdBu' is automatically centred at 0.
         If *None*, auto-detected from data keys.
-    stride : int
-        Arrow sub-sampling stride.
+    n_arrows : int
+        Number of arrow grid points along each axis (n_arrows × n_arrows
+        evenly-spaced arrows).
     title : str
         Figure suptitle.
     filename : str, optional
@@ -85,15 +198,8 @@ def plot_2d_frame(data, t=-1, fields=None, stride=4, title='',
     fontsize : int
         Colorbar label font size.
     """
-    # --- auto-detect panels ------------------------------------------------
     if fields is None:
-        fields = [('rho', r'$\rho$', 'inferno')]
-        if 'm' in data:
-            fields.append(('m', r'$m$ (myosin)', 'viridis'))
-        fields.append(('v', r'$|v|$', 'Reds'))
-        if 'div_v' in data:
-            fields.append(('div_v', r'$-\nabla \cdot v$', 'RdBu_r'))
-        fields.append(('Q', r'$Q_{yy}$', 'RdBu_r'))
+        fields = _auto_fields(data)
 
     n_panels = len(fields)
     extent = (data['x'][0], data['x'][-1],
@@ -101,367 +207,156 @@ def plot_2d_frame(data, t=-1, fields=None, stride=4, title='',
     Xc, Yc = (np.meshgrid(data['x'], data['y'])
               if 'x' in data else (None, None))
 
-    fig, axes = plt.subplots(1, n_panels, figsize=(4.25 * n_panels, 4),
+    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 3.2),
                              sharex=True, sharey=True)
     if n_panels == 1:
         axes = [axes]
 
-    def _get(key):
-        arr = data[key]
-        return arr[t] if arr.ndim == 3 else arr
-
     for ax, (key, label, cmap) in zip(axes, fields):
-        symmetric = 'RdBu' in cmap
-
-        if key == 'v':
-            vx, vy = _get('vx'), _get('vy')
-            vmag = np.sqrt(vx**2 + vy**2) + 1e-10 # avoid division by zero
-            im = ax.imshow(vmag.T, origin='lower', cmap=cmap, extent=extent)
-            if vmag.max() > 1e-10 and Xc is not None:
-                ax.quiver(Xc[::stride, ::stride], Yc[::stride, ::stride],
-                          (vx / vmag)[::stride, ::stride].T,
-                          (vy / vmag)[::stride, ::stride].T,
-                          scale=20, width=0.008, pivot='mid',
-                          headwidth=3, headlength=3, color='black')
-            add_cbar(ax, im, 0, round(vmag.max(), 3), label, fontsize=fontsize)
-
-        elif key == 'Q':
-            Q_f = _get('Q')
-            vmax_q = max(np.abs(Q_f).max(), 1e-6)
-            im = ax.imshow((-Q_f).T, origin='lower', cmap=cmap,
-                           extent=extent, vmin=-vmax_q, vmax=vmax_q)
-            if 'q' in data and Xc is not None:
-                q_f = _get('q')
-                nx, ny = nematic_to_vector(Q_f, q_f)
-                nmag = np.sqrt(nx**2 + ny**2) 
-                if nmag.max() > 1e-10:
-                    ax.quiver(Xc[::stride, ::stride], Yc[::stride, ::stride],
-                              (nx / nmag)[::stride, ::stride].T,
-                              (ny / nmag)[::stride, ::stride].T,
-                              scale=20, width=0.008, pivot='mid',
-                              headwidth=0, headlength=0, color='black')
-            add_cbar(ax, im, -round(vmax_q, 2), round(vmax_q, 2),
-                     label, fontsize=fontsize)
-
-        else:
-            field = _get(key)
-            if symmetric:
-                vm = max(np.abs(field).max(), 1e-6)
-                im = ax.imshow(field.T, origin='lower', cmap=cmap,
-                               extent=extent, vmin=-vm, vmax=vm)
-                add_cbar(ax, im, -round(vm, 2), round(vm, 2),
-                         label, fontsize=fontsize)
-            else:
-                im = ax.imshow(field.T, origin='lower', cmap=cmap,
-                               extent=extent, vmin=0, vmax=np.max(field))
-                add_cbar(ax, im, 0, round(np.max(field), 2),
-                         label, fontsize=fontsize)
-
-        ax.set_xticks([]); ax.set_yticks([])
+        _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc,
+                    n_arrows, fontsize)
 
     if title:
-        plt.suptitle(title, y=1.02)
-    plt.tight_layout()
+        fig.suptitle(title, y=1.02)
+    fig.subplots_adjust(wspace=0.02, left=0.02, right=0.98, bottom=0.12, top=0.95)
     if filename is not None:
         plt.savefig(filename, dpi=400)
     plt.show()
 
 
-# ---------------------------------------------------------------------------
-# OpenCV-based visualization functions
-# ---------------------------------------------------------------------------
+def animate_2d(data, filename='animation.mp4', fields=None,
+               n_arrows=10, fps=8, fontsize=11, dpi=120,
+               title_fmt='t = {t:.1f}', dt=1.0):
+    """Create an animated MP4 (or GIF) from a time-series data dict.
 
-def value2bgr(values, cmap_name, vmin, vmax):
+    Parameters
+    ----------
+    data : dict
+        Export dict (same format as ``plot_2d_frame``).  Time-dependent
+        arrays must have shape ``(N, nx, ny)``.
+    filename : str
+        Output path.  Supports ``.mp4`` (default, requires ffmpeg) and
+        ``.gif`` (uses Pillow).
+    fields : list of (key, label, cmap), optional
+        Panel specs (see ``plot_2d_frame``).  Auto-detected if *None*.
+    n_arrows : int
+        Number of arrow grid points along each axis (n_arrows × n_arrows
+        evenly-spaced arrows).
+    fps : int
+        Frames per second.
+    fontsize : int
+        Colorbar label font size.
+    dpi : int
+        Resolution of each frame.
+    title_fmt : str
+        Format string for suptitle; receives ``t`` (time) and ``i`` (index).
+        Set to ``''`` to disable.
+    dt : float
+        Physical time between saved frames (used in *title_fmt*).
     """
-    Convert a value to a color using a given colormap.
+    if fields is None:
+        fields = _auto_fields(data)
 
-    Parameters:
-    value (float): Value to be converted
-    cmap_name (string): Name of the colormap
-    vmin (float): Minimum value for normalization
-    vmax (float): Maximum value for normalization
+    N = next(data[k].shape[0] for k in data if data[k].ndim == 3)
+    n_panels = len(fields)
+    extent = (data['x'][0], data['x'][-1],
+              data['y'][0], data['y'][-1]) if 'x' in data else (0, 1, 0, 1)
+    Xc, Yc = (np.meshgrid(data['x'], data['y'])
+              if 'x' in data else (None, None))
 
-    Returns:
-    color (array): BGR color
-    """
-    norm = Normalize(vmin=vmin, vmax=vmax)
-    normalized_density = norm(values)
-    
-    # Use matplotlib's colormap to convert to RGB
-    cmap_func = plt.get_cmap(cmap_name)
-    colored = cmap_func(normalized_density)
-    
-    # Convert to BGR for OpenCV (including alpha channel handling)
-    colored_rgb = (colored[:, :, :3] * 255).astype(np.uint8)
-    colored_bgr = cv2.cvtColor(colored_rgb, cv2.COLOR_RGB2BGR)
+    # Pre-compute global vlims so colours are consistent across frames
+    vlims = {}
+    for key, _, cmap in fields:
+        symmetric = 'RdBu' in cmap
+        if key == 'v':
+            all_vmag = np.sqrt(data['vx']**2 + data['vy']**2)
+            vlims['v'] = (0, float(all_vmag.max()))
+        elif key == 'Q':
+            vlims['Q'] = (0, float(max(np.abs(data['Q']).max(), 1e-6)))
+        else:
+            arr = data.get(key)
+            if arr is not None and arr.ndim == 3:
+                if symmetric:
+                    vm = float(max(np.abs(arr).max(), 1e-6))
+                    vlims[key] = (-vm, vm)
+                else:
+                    vlims[key] = (0, float(max(arr.max(), 1e-6)))
 
-    return colored_bgr
+    # Pre-compute arrow index arrays once (same for every frame)
+    ix, iy = None, None
+    if 'vx' in data:
+        nx_size, ny_size = data['vx'].shape[1], data['vx'].shape[2]
+        ix = _arrow_idx(nx_size, n_arrows)
+        iy = _arrow_idx(ny_size, n_arrows)
+    elif 'Q' in data and data['Q'].ndim == 3:
+        nx_size, ny_size = data['Q'].shape[1], data['Q'].shape[2]
+        ix = _arrow_idx(nx_size, n_arrows)
+        iy = _arrow_idx(ny_size, n_arrows)
 
-def visualize_active_gel_frame(density, velocity_field, nematic_field, 
-                               density_cmap='Greys', vector_scale=1.0, 
-                               skip=5, arrow_width=1, tip_length=0.2, 
-                               density_range=None, velocity_range=None, nematic_range=None):
-    """
-    Create a visualization frame for active gel simulation data.
-    
-    Parameters:
-    -----------
-    density : 2D numpy array
-        Density field (will be visualized as grayscale heatmap)
-    velocity_field : tuple of 2D numpy arrays (vx, vy)
-        Velocity vector field components
-    nematic_field : tuple of 2D numpy arrays (nx, ny)
-        Nematic order vector field components
-    density_cmap : str, default='Greys'
-        Matplotlib colormap for density visualization
-    vector_scale : float, default=1.0
-        Scaling factor for vector magnitudes
-    skip : int, default=5
-        Sample vectors every 'skip' points for better visualization
-    arrow_scale : float, default=1.0
-        Scale factor for arrow size
-    arrow_width : int, default=1
-        Width of the arrow lines
-        
-    Returns:
-    --------
-    frame : numpy array
-        RGB visualization frame
-    """
-    height, width = density.shape
-    if density_range is None: 
-        density_range = [np.min(density), np.max(density)]
-    if velocity_range is None: 
-        velocity_range = [np.min(velocity_field[:, :, 0]), np.max(velocity_field[:, :, 1])]
-    if nematic_range is None:
-        nematic_range = [np.min(nematic_field[:, :, 0]), np.max(nematic_field[:, :, 1])]
-    
-    # Create three separate visualizations with consistent colormap ranges
-    density_vis = visualize_density(density, density_range[0], density_range[1], cmap=density_cmap)
-    
-    velocity_vis = visualize_vector_field(velocity_field, 
-                                         height, width, velocity_range[0], velocity_range[1], 
-                                         skip=skip, cmap='plasma', scale=vector_scale,
-                                        arrow_width=arrow_width, tip_length=tip_length)
-    
-    nematic_vis = visualize_vector_field(nematic_field, 
-                                        height, width, nematic_range[0], nematic_range[1], 
-                                        skip=skip, cmap='viridis', scale=vector_scale,
-                                        arrow_width=arrow_width, tip_length=0)
-    
-    # Combine the three visualizations horizontally
-    composite = np.hstack([density_vis, velocity_vis, nematic_vis])
-    
-    # Add labels
-    font = cv2.FONT_HERSHEY_SIMPLEX
-    cv2.putText(composite, 'Density', (width//2 - 40, height + 30), 
-                font, 0.7, (255, 255, 255), 2)
-    cv2.putText(composite, 'Velocity', (width + width//2 - 40, height + 30), 
-                font, 0.7, (255, 255, 255), 2)
-    cv2.putText(composite, 'Nematic Order', (2*width + width//2 - 60, height + 30), 
-                font, 0.7, (255, 255, 255), 2)
-    
-    return composite
+    # --- Build figure once from frame 0, collecting artist handles ----------
+    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 3.2),
+                             sharex=True, sharey=True)
+    if n_panels == 1:
+        axes = [axes]
 
+    ims, qvs = [], []
+    for ax, (key, label, cmap) in zip(axes, fields):
+        im, qv = _draw_panel(ax, key, label, cmap, data, 0,
+                             extent, Xc, Yc, n_arrows, fontsize,
+                             vlims=vlims, ix=ix, iy=iy)
+        ims.append(im)
+        qvs.append(qv)
 
-def visualize_density(density, vmin, vmax, cmap='Greys', ):
-    """Visualize density field as a grayscale heatmap with consistent normalization"""    
-    return value2bgr(density, cmap, vmin, vmax)
+    title_obj = (fig.suptitle(title_fmt.format(t=0, i=0), y=1.02)
+                 if title_fmt else None)
+    fig.subplots_adjust(wspace=0.02, left=0.02, right=0.98, bottom=0.12, top=0.95)
 
+    # --- Update function: swap data in-place, never touch colorbars ---------
+    def _get(k, t):
+        arr = data[k]
+        return arr[t] if arr.ndim == 3 else arr
 
-def visualize_vector_field(vector_field, height, width, vmin, vmax,  
-                           skip=5, cmap='viridis', scale=1.0, 
-                           arrow_width=1, tip_length=0.2):
-    """Visualize a vector field with unit-length vectors on a magnitude background"""
-    magnitude = np.linalg.norm(vector_field, axis=2)
-    
-    # Create background based on magnitude with consistent normalization
-    background_bgr = value2bgr(magnitude, cmap, vmin, vmax)
-    
-    # Draw unit-length vectors
-    for i in range(0, height, skip):
-        for j in range(0, width, skip):
-            # Skip if magnitude is close to zero
-            mag = magnitude[i, j]
-            if mag < 1e-6:
-                continue
+    def _update(frame_idx):
+        for (key, _, _), im, qv in zip(fields, ims, qvs):
+            if key == 'v':
+                vx = _get('vx', frame_idx)
+                vy = _get('vy', frame_idx)
+                vmag = np.sqrt(vx**2 + vy**2) + 1e-10
+                im.set_data(vmag.T)
+                im.set_clim(*vlims['v'])
+                if qv is not None and ix is not None:
+                    qv.set_UVC((vx / vmag)[np.ix_(ix, iy)].T,
+                               (vy / vmag)[np.ix_(ix, iy)].T)
+            elif key == 'Q':
+                Q_f = _get('Q', frame_idx)
+                im.set_data((-Q_f).T)
+                vmax_q = vlims['Q'][1]
+                im.set_clim(-vmax_q, vmax_q)
+                if qv is not None and 'q' in data and ix is not None:
+                    q_f = _get('q', frame_idx)
+                    nx_vec, ny_vec = nematic_to_vector(Q_f, q_f)
+                    nmag = np.sqrt(nx_vec**2 + ny_vec**2) + 1e-10
+                    qv.set_UVC((nx_vec / nmag)[np.ix_(ix, iy)].T,
+                               (ny_vec / nmag)[np.ix_(ix, iy)].T)
+            else:
+                im.set_data(_get(key, frame_idx).T)
+                if key in vlims:
+                    im.set_clim(*vlims[key])
 
-            v = vector_field[i, j]/mag*scale 
+        if title_obj is not None:
+            title_obj.set_text(title_fmt.format(t=frame_idx * dt,
+                                                i=frame_idx))
+        return ims
 
-            # Draw arrow
-            start_point = (int(j), int(i))
-            end_point = (int(j + v[0]), int(i + v[1]))
-            
-            cv2.arrowedLine(background_bgr, start_point, end_point, 
-                            (255, 255, 255), arrow_width, tipLength=tip_length)
-    
-    return background_bgr
-
-def animate_active_gel(density_frames, velocity_frames, nematic_frames, 
-                               N, n_samples, filename="output_sim.gif",
-                               fps=10, dpi=100, stride=3):
-    """
-    Parameters:
-    -----------
-    density_frames : list of 2D arrays
-        List of density field frames
-    velocity_frames : list of (vx, vy) tuples
-        List of velocity field component frames
-    nematic_frames : list of (nx, ny) tuples
-        List of nematic order field component frames
-    N : Number of frames
-    n_samples : Number of samples.
-    --------
-    """
-    X = np.linspace(0, 1, n_samples)
-    Y = np.linspace(0, 1, n_samples)
-    X, Y = np.meshgrid(X, Y)
-
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-
-    def update(frame_idx):
-        for ax in axes:
-            ax.clear()
-            ax.set_xticks([])
-            ax.set_yticks([])
-
-        # Density
-        rho = density_frames[frame_idx]
-        im0 = axes[0].contourf(X, Y, rho, levels=100, cmap='viridis')
-        axes[0].set_title('Density')
-
-        # Velocity
-        vx = velocity_frames[frame_idx, ..., 0]
-        vy = velocity_frames[frame_idx, ..., 1]
-        vmag = np.sqrt(vx**2 + vy**2)
-        im1 = axes[1].contourf(X, Y, vmag, levels=100, cmap='viridis')
-        axes[1].quiver(X[::stride, ::stride], Y[::stride, ::stride],
-                       (vx/vmag)[::stride, ::stride], (vy/vmag)[::stride, ::stride],
-                       color='orange', width=0.003, headwidth=4, headlength=5, headaxislength=7)
-        axes[1].set_title('Velocity')
-
-        # Nematic field
-        nx = nematic_frames[frame_idx, ..., 0]
-        ny = nematic_frames[frame_idx, ..., 1]
-        nmag = np.sqrt(nx**2 + ny**2)
-        im2 = axes[2].contourf(X, Y, nmag, levels=100, cmap='viridis')
-        axes[2].quiver(X[::stride, ::stride], Y[::stride, ::stride],
-                       (nx/nmag)[::stride, ::stride], (ny/nmag)[::stride, ::stride],
-                       color='orange', width=0.003, headlength=0, headaxislength=0)
-        axes[2].set_title('Nematic order')
-
-        return [im0, im1, im2]
-
-    ani = animation.FuncAnimation(fig, update, frames=N, blit=False)
-    ani.save(filename, fps=fps, dpi=dpi)
+    ani = animation.FuncAnimation(fig, _update, frames=N, blit=False)
+    if filename.endswith('.gif'):
+        ani.save(filename, fps=fps, dpi=dpi, writer='pillow')
+    else:
+        ani.save(filename, dpi=dpi,
+                 writer=animation.FFMpegWriter(fps=fps, codec='h264'))
     plt.close(fig)
-                                   
-def create_active_gel_video(density_frames, velocity_frames, nematic_frames, 
-                            output_file='active_gel_simulation.mp4', fps=30, skip=5,
-                            vector_scale=1.0, arrow_width=1):
-    """
-    Create a video from active gel simulation data
-    
-    Parameters:
-    -----------
-    density_frames : list of 2D arrays
-        List of density field frames
-    velocity_frames : list of (vx, vy) tuples
-        List of velocity field component frames
-    nematic_frames : list of (nx, ny) tuples
-        List of nematic order field component frames
-    output_file : str, default='active_gel_simulation.mp4'
-        Output video filename
-    fps : int, default=30
-        Frames per second
-    skip : int, default=5
-        Sample vectors every 'skip' points for better visualization
-    vector_scale : float, default=1.0
-        Scaling factor for vector magnitudes
-    arrow_scale : float, default=5.0
-        Scale factor for arrow size
-    arrow_width : int, default=1
-        Width of the arrow lines
-    """
-    # Compute global min/max values for consistent colormapping if requested
-    density_range = [np.min(density_frames), np.max(density_frames)]
-    velocity_range = [np.min(velocity_frames[:, :, :, 0]), np.max(velocity_frames[:, :, :, 1])]
-    nematic_range = [np.min(nematic_frames[:, :, :, 0]), np.max(nematic_frames[:, :, :, 1])]
-    
-    # Create first frame to get dimensions
-    first_frame = visualize_active_gel_frame(
-        density_frames[0], velocity_frames[0], nematic_frames[0],
-        skip=skip, vector_scale=vector_scale, 
-        arrow_width=arrow_width,
-        density_range=density_range,
-        velocity_range=velocity_range,
-        nematic_range=nematic_range
-    )
-    
-    # Initialize video writer
-    fourcc = cv2.VideoWriter_fourcc(*'mp4v')  # or 'XVID' for AVI
-    video = cv2.VideoWriter(output_file, fourcc, fps, 
-                           (first_frame.shape[1], first_frame.shape[0]))
-    
-    # Add frames to video
-    for i in range(len(density_frames)):
-        frame = visualize_active_gel_frame(
-            density_frames[i], velocity_frames[i], nematic_frames[i],
-            skip=skip, vector_scale=vector_scale, 
-            arrow_width=arrow_width,
-            density_range=density_range,
-            velocity_range=velocity_range,
-            nematic_range=nematic_range
-        )
-        video.write(frame)
-        
-        # Optional: print progress
-        if i % 10 == 0:
-            print(f"Processing frame {i}/{len(density_frames)}")
-    
-    # Release resources
-    video.release()
-    print(f"Video saved to {output_file}")
+    print(f'Saved {filename}  ({N} frames, {fps} fps)')
 
 
-# Example usage
-if __name__ == "__main__":
-    # Generate sample data (replace with your actual simulation data)
-    n_frames = 60
-    height, width = 400, 400
-    
-    # Create sample data
-    density_frames = []
-    velocity_frames = []
-    nematic_frames = []
-    
-    for t in range(n_frames):
-        # Sample density field: diffusing gaussian
-        x, y = np.meshgrid(np.linspace(-5, 5, width), np.linspace(-5, 5, height))
-        center_x = 2 * np.cos(t/10)
-        center_y = 2 * np.sin(t/10)
-        density = np.exp(-((x-center_x)**2 + (y-center_y)**2) / (2 + t/30))
-        density_frames.append(density)
-        
-        # Sample velocity field: rotating vortex
-        vx = -(y - center_y) * 0.1
-        vy = (x - center_x) * 0.1
-        v = np.stack((vx, vy), axis=-1)
-        velocity_frames.append(v)
-        
-        # Sample nematic field: aligned in bands
-        nx = np.cos(x + t/10)
-        ny = np.sin(y + t/10)
-        n = np.stack((nx, ny), axis=-1)
-        nematic_frames.append(n)
-
-    density_frames = np.array(density_frames)
-    velocity_frames = np.array(velocity_frames) 
-    nematic_frames = np.array(nematic_frames)
-    
-    # Create video
-    create_active_gel_video(density_frames, velocity_frames, nematic_frames, 
-                            output_file='../figures/active_gel_demo.mp4',
-                            fps=20, skip=20, vector_scale=10, 
-                            arrow_width=2)     
-           
+# Keep old name as an alias for backwards compatibility
+animate_2d_gif = animate_2d
