@@ -16,3 +16,4 @@
 /data/height_map
 /data/actin_flow*
 /src/archive
+*.npz

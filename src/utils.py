@@ -65,15 +65,15 @@ def add_cbar(ax, norm, cmap, vmin, vmax, label, fontsize=13):
     return cbar
 
 
-def _auto_fields(data):
+def _auto_fields(data, cmap_rho='inferno', cmap_m='viridis', cmap_v='Reds', cmap_div='RdBu_r', cmap_Q='RdBu_r'):
     """Return a default list of (key, label, cmap) panel specs for *data*."""
-    fields = [('rho', r'$\rho$', 'inferno')]
+    fields = [('rho', r'$\rho$', cmap_rho)]
     if 'm' in data:
-        fields.append(('m', r'$m$ (myosin)', 'viridis'))
-    fields.append(('v', r'$|v|$', 'Reds'))
+        fields.append(('m', r'$m$ (myosin)', cmap_m))
+    fields.append(('v', r'$|v|$', cmap_v))
     if 'div_v' in data:
-        fields.append(('div_v', r'$-\nabla \cdot v$', 'RdBu_r'))
-    fields.append(('Q', r'$Q_{yy}$', 'RdBu_r'))
+        fields.append(('div_v', r'$-\nabla \cdot v$', cmap_div))
+    fields.append(('Q', r'$Q_{yy}$', cmap_Q))
     return fields
 
 
@@ -101,7 +101,8 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
         Pre-computed x/y index arrays (avoids recomputing on every animation
         frame).  Derived from ``n_arrows`` when omitted.
     """
-    symmetric = 'RdBu' in cmap
+    cmap_name = cmap.name if hasattr(cmap, 'name') else str(cmap)
+    symmetric = 'RdBu' in cmap_name
     qv = None
 
     def _get(k):
@@ -173,7 +174,7 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
 
 
 def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
-                  filename=None, fontsize=13):
+                  filename=None, fontsize=13, cmap_rho='inferno', cmap_m='viridis', cmap_v='Reds', cmap_div='RdBu_r', cmap_Q='RdBu_r'):
     """Unified 2D frame plot with configurable panels.
 
     Parameters
@@ -199,7 +200,7 @@ def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
         Colorbar label font size.
     """
     if fields is None:
-        fields = _auto_fields(data)
+        fields = _auto_fields(data, cmap_rho=cmap_rho, cmap_m=cmap_m, cmap_v=cmap_v, cmap_div=cmap_div, cmap_Q=cmap_Q)
 
     n_panels = len(fields)
     extent = (data['x'][0], data['x'][-1],
@@ -207,8 +208,8 @@ def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
     Xc, Yc = (np.meshgrid(data['x'], data['y'])
               if 'x' in data else (None, None))
 
-    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 3.2),
-                             sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 4.0),
+                             sharex=True, sharey=True, layout='constrained')
     if n_panels == 1:
         axes = [axes]
 
@@ -217,8 +218,7 @@ def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
                     n_arrows, fontsize)
 
     if title:
-        fig.suptitle(title, y=1.02)
-    fig.subplots_adjust(wspace=0.02, left=0.02, right=0.98, bottom=0.12, top=0.95)
+        fig.suptitle(title)
     if filename is not None:
         plt.savefig(filename, dpi=400)
     plt.show()
@@ -226,7 +226,7 @@ def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
 
 def animate_2d(data, filename='animation.mp4', fields=None,
                n_arrows=10, fps=8, fontsize=11, dpi=120,
-               title_fmt='t = {t:.1f}', dt=1.0):
+               title_fmt='t = {t:.1f}', dt=1.0, cmap_rho='inferno', cmap_m='viridis', cmap_v='Reds', cmap_div='RdBu_r', cmap_Q='RdBu_r'):
     """Create an animated MP4 (or GIF) from a time-series data dict.
 
     Parameters
@@ -255,7 +255,7 @@ def animate_2d(data, filename='animation.mp4', fields=None,
         Physical time between saved frames (used in *title_fmt*).
     """
     if fields is None:
-        fields = _auto_fields(data)
+        fields = _auto_fields(data, cmap_rho=cmap_rho, cmap_m=cmap_m, cmap_v=cmap_v, cmap_div=cmap_div, cmap_Q=cmap_Q)
 
     N = next(data[k].shape[0] for k in data if data[k].ndim == 3)
     n_panels = len(fields)
@@ -267,7 +267,8 @@ def animate_2d(data, filename='animation.mp4', fields=None,
     # Pre-compute global vlims so colours are consistent across frames
     vlims = {}
     for key, _, cmap in fields:
-        symmetric = 'RdBu' in cmap
+        cmap_name = cmap.name if hasattr(cmap, 'name') else str(cmap)
+        symmetric = 'RdBu' in cmap_name
         if key == 'v':
             all_vmag = np.sqrt(data['vx']**2 + data['vy']**2)
             vlims['v'] = (0, float(all_vmag.max()))
@@ -294,8 +295,8 @@ def animate_2d(data, filename='animation.mp4', fields=None,
         iy = _arrow_idx(ny_size, n_arrows)
 
     # --- Build figure once from frame 0, collecting artist handles ----------
-    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 3.2),
-                             sharex=True, sharey=True)
+    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 4.0),
+                             sharex=True, sharey=True, layout='constrained')
     if n_panels == 1:
         axes = [axes]
 
@@ -307,9 +308,8 @@ def animate_2d(data, filename='animation.mp4', fields=None,
         ims.append(im)
         qvs.append(qv)
 
-    title_obj = (fig.suptitle(title_fmt.format(t=0, i=0), y=1.02)
+    title_obj = (fig.suptitle(title_fmt.format(t=0, i=0))
                  if title_fmt else None)
-    fig.subplots_adjust(wspace=0.02, left=0.02, right=0.98, bottom=0.12, top=0.95)
 
     # --- Update function: swap data in-place, never touch colorbars ---------
     def _get(k, t):

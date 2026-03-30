@@ -85,7 +85,7 @@ class MyosinActinGel2D(NematicActiveGel2D):
 
     def _active_stress_nonlinear(self, v_trial, rho_trial, Q_trial, v_test, q_trial=None, m_trial=None):
         """Active stress scaled by rho*m (myosin provides the motor activity)."""
-        s = rho_trial * m_trial * 2 / (rho_trial + 1)
+        s = rho_trial * self._hill(m_trial) * 2 / (rho_trial * self._hill(m_trial) + 1)
         if self.mesh.dim == 1:
             return (self.chi0 * s * grad(v_test) * dx
                     + self.chi1 * s * Q_trial * grad(v_test) * dx)
