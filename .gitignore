@@ -4,8 +4,6 @@
 /.virtual_documents
 *.pyc
 *.mp4
-/Xin data
-/Test data
 *.png
 /figures
 /notebooks/sim_data
@@ -16,4 +14,4 @@
 /data/height_map
 /data/actin_flow*
 /src/archive
-*.npz
+/sim_data/*
