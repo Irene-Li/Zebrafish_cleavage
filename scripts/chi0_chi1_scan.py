@@ -39,35 +39,38 @@ chi0_values = np.exp(np.linspace(np.log(0.01), np.log(1), n_chi))  # Logarithmic
 chi1_values = np.exp(np.linspace(np.log(0.01), np.log(1), n_chi))  # Logarithmic spacing between 0.01 and 1
 
 # Fixed source fields (from actin_myo_gel.ipynb 2D example)
-S = (tanh_source(center=0.5, width=0.1, value=1, axis='x', interface_length=0.01) *
-     tanh_source(center=0.5, width=0.9, value=1, axis='y', interface_length=0.1) + 0.1)
-m0 = (tanh_source(center=0.5, width=0.1, value=1, axis='x', interface_length=0.01) *
-      tanh_source(center=0.5, width=0.9, value=1, axis='y', interface_length=0.1))
-Qsq = (2 * tanh_source(center=0.5, width=0.1, value=1, axis='x', interface_length=0.01) *
-       tanh_source(center=0.5, width=0.9, value=1, axis='y', interface_length=0.1) - 1)
+width = 0.05
+center = 0.5
+interfacial_width = 0.005
+Lx = 1
+Ly = 1
+source = tanh_source(center=center, width=width, value=1, axis='x', interface_length=interfacial_width) * \
+         tanh_source(center=center, width=Ly*0.9, value=1, axis='y', interface_length=0.1)
+
+S = 0.8*source + 0.2
+m0 = source
+Qsq = 2*source - 1
 
 # Other fixed parameters (from actin_myo_gel.ipynb 2D example)
 params = {
-    'width': 1,
-    'height': 1,
-    'maxh': 0.03,
+    'width': 1, 'height': 1, 'maxh': 0.03,
     # mechanics
-    'gamma': 1.0,
-    'eta_1': 1.0,
-    'eta_2': 0.0,
+    'gamma': 1,
+    'eta_1': 1,
+    'eta_2': 0,
     # nematic
-    'kappa': 1e-3,
-    'beta1': 1.0,
-    'beta2': 1.0,
+    'kappa': 1e-4,
+    'beta1': 0.2,
+    'beta2': 1,
     'Qsq': Qsq,
     # density / myosin
     'S': S,
     'm0': m0,
-    'k0': 0.1,
-    'k1': 0.9,
-    'k_m': 1.0,
+    'k0': 0.2,
+    'k1': 0.8,
+    'k_m': 0.5,
     'n_hill': 4,
-    'm_ref': 0.2,
+    'm_ref': 0.12,
     'D_rho': 1e-4,
     'D_m': 1e-4,
     # base
