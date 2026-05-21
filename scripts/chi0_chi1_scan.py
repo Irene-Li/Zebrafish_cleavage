@@ -29,7 +29,7 @@ output_dir = Path(__file__).parent.parent / "sim_data" / "acto_myo"
 output_dir.mkdir(parents=True, exist_ok=True)
 
 # Simulation parameters (from actin_myo_gel.ipynb)
-T   = 100
+T   = 30
 tau = 0.05
 save_interval = int(1.0 / tau)  # Save every t=1 (20 time steps)
 
@@ -70,7 +70,7 @@ params = {
     'k1': 0.8,
     'k_m': 0.5,
     'n_hill': 4,
-    'm_ref': 0.12,
+    'm_ref': 0.1,
     'D_rho': 1e-4,
     'D_m': 1e-4,
     # base
@@ -94,7 +94,7 @@ for i, chi0 in enumerate(chi0_values):
             print(f"[{count}/{n_chi**2}] Skipping chi0={chi0:.4f}, chi1={chi1:.4f} (file exists)")
             continue
 
-        print(f"[{count}/{n_chi**2}] Running chi0={chi0:.4f}, chi1={chi1:.4f}...", end='', flush=True)
+        print(f"[{count}/{n_chi**2}] Running chi0={chi0:.4f}, chi1={chi1:.4f}...", end='', flush=False)
 
         try:
             sim = MyosinActinGel2D(

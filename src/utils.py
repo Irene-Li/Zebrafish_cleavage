@@ -82,6 +82,18 @@ def _arrow_idx(n_size, n_arrows):
     return np.round(np.linspace(0, n_size - 1, n_arrows)).astype(int)
 
 
+def _r1(v):
+    """Ceil v, choosing the closer of 1-sig-fig or nearest-0.1 ceiling."""
+    v = float(v)
+    if v == 0:
+        return 0.0
+    from math import floor, log10, ceil
+    magnitude = 10 ** floor(log10(abs(v)))
+    c_sigfig = ceil(v / magnitude) * magnitude
+    c_tenth = ceil(v * 10) / 10
+    return min(c_sigfig, c_tenth)
+
+
 def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
                 fontsize=13, vlims=None, ix=None, iy=None):
     """Render a single panel on *ax*.
@@ -113,7 +125,7 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
         vx, vy = _get('vx'), _get('vy')
         vmag = np.sqrt(vx**2 + vy**2) + 1e-10
         vmin_v, vmax_v = (vlims['v'] if vlims and 'v' in vlims
-                          else (0, float(vmag.max())))
+                          else (0, _r1(vmag.max())))
         norm = Normalize(vmin=vmin_v, vmax=vmax_v, clip=True)
         im = ax.imshow(vmag.T, origin='lower', cmap=cmap,
                        extent=extent, norm=norm)
@@ -123,7 +135,7 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
             qv = ax.quiver(Xc[np.ix_(_iy, _ix)], Yc[np.ix_(_iy, _ix)],
                            (vx / vmag)[np.ix_(_ix, _iy)].T,
                            (vy / vmag)[np.ix_(_ix, _iy)].T,
-                           scale=20, width=0.008, pivot='mid',
+                           width=0.012, pivot='mid', headaxislength=3,
                            headwidth=3, headlength=3, color='black')
         add_cbar(ax, norm, cmap, round(vmin_v, 3), round(vmax_v, 3),
                  label, fontsize=fontsize)
@@ -133,7 +145,7 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
         if vlims and 'Q' in vlims:
             vmax_q = vlims['Q'][1]
         else:
-            vmax_q = max(float(np.abs(Q_f).max()), 1e-6)
+            vmax_q = max(_r1(np.abs(Q_f).max()), 1e-6)
         norm = Normalize(vmin=-vmax_q, vmax=vmax_q, clip=True)
         im = ax.imshow((-Q_f).T, origin='lower', cmap=cmap,
                        extent=extent, norm=norm)
@@ -159,10 +171,10 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
         if vlims and key in vlims:
             lo, hi = vlims[key]
         elif symmetric:
-            vm = max(float(np.abs(field).max()), 1e-6)
+            vm = max(_r1(np.abs(field).max()), 1e-6)
             lo, hi = -vm, vm
         else:
-            lo, hi = 0.0, max(float(np.max(field)), 1e-6)
+            lo, hi = 0.0, max(_r1(np.max(field)), 1e-6)
         norm = Normalize(vmin=lo, vmax=hi, clip=True)
         im = ax.imshow(field.T, origin='lower', cmap=cmap,
                        extent=extent, norm=norm, interpolation='none')
@@ -174,7 +186,8 @@ def _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc, n_arrows,
 
 
 def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
-                  filename=None, fontsize=13, cmap_rho='inferno', cmap_m='viridis', cmap_v='Reds', cmap_div='RdBu_r', cmap_Q='RdBu_r'):
+                  filename=None, fontsize=13, cmap_rho='inferno', cmap_m='viridis', cmap_v='Reds', cmap_div='RdBu_r', cmap_Q='RdBu_r',
+                  vlims=None):
     """Unified 2D frame plot with configurable panels.
 
     Parameters
@@ -185,12 +198,12 @@ def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
         Time-frame index (-1 = last frame).
     fields : list of (key, label, cmap), optional
         Each tuple defines one panel.  Special keys:
-          'v'  – velocity magnitude + normalised arrows (uses 'vx', 'vy')
-          'Q'  – nematic Q_yy (= −Q_xx) + director arrows (uses 'Q', 'q')
+          'v'  - velocity magnitude + normalised arrows (uses 'vx', 'vy')
+          'Q'  - nematic Q_yy (= -Q_xx) + director arrows (uses 'Q', 'q')
         A cmap containing 'RdBu' is automatically centred at 0.
         If *None*, auto-detected from data keys.
     n_arrows : int
-        Number of arrow grid points along each axis (n_arrows × n_arrows
+        Number of arrow grid points along each axis (n_arrows x n_arrows
         evenly-spaced arrows).
     title : str
         Figure suptitle.
@@ -207,15 +220,14 @@ def plot_2d_frame(data, t=-1, fields=None, n_arrows=10, title='',
               data['y'][0], data['y'][-1]) if 'x' in data else (0, 1, 0, 1)
     Xc, Yc = (np.meshgrid(data['x'], data['y'])
               if 'x' in data else (None, None))
-
-    fig, axes = plt.subplots(1, n_panels, figsize=(3.0 * n_panels, 4.0),
-                             sharex=True, sharey=True, layout='constrained')
+    
+    fig, axes = plt.subplots(1, n_panels, figsize=[2*n_panels,3], sharex=True, sharey=True, layout='constrained')
     if n_panels == 1:
         axes = [axes]
 
     for ax, (key, label, cmap) in zip(axes, fields):
         _draw_panel(ax, key, label, cmap, data, t, extent, Xc, Yc,
-                    n_arrows, fontsize)
+                    n_arrows, fontsize, vlims=vlims)
 
     if title:
         fig.suptitle(title)
