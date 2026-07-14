@@ -63,21 +63,27 @@ data runs straight from a fresh clone.
 
 ## 3. Notebooks
 
-| Notebook | What it does | Needs NGSolve | Input data | Runs from a fresh clone? |
-|---|---|:---:|---|---|
-| `data_analysis.ipynb` | Actin kymograph / lifeact-intensity analysis | – | `data/actin_data/` (committed) | ✅ **yes** |
-| `constriction1.ipynb` | Furrow-constriction energetics vs. measured furrow positions (WT / Ca-free / caRhoA) | – | `data/furrow_position_h1_h2/` (committed) | ✅ **yes** |
-| `constriction2.ipynb` | Phase-2 constriction energy landscape & phase diagram | – | committed data; **self-generates** `sim_data/constriction/` | ✅ **yes** (a few min) |
-| `furrow_width.ipynb` | Depletion-zone width vs. velocity & cable nematic order, from kymograph TIFFs | – | `data/actin_kymo/` (committed); *optional* `sim_data/caRhoA.npz` overlay | ✅ **yes** |
-| `active_gel_fem.ipynb` | Base nematic active-gel model (1D/2D), isotropic vs. banded state | ✅ | none (source field defined inline) | ✅ yes, once NGSolve is installed |
-| `actin_myo_gel.ipynb` | Coupled actin–myosin gel, 2D furrow kymograph | ✅ | none (inline) | ✅ yes, once NGSolve is installed |
-| `caRhoA_actin_dynamics.ipynb` | caRhoA perturbation sweep → velocity / depletion-width / nematic-order scaling | ✅ | none (inline); **generates** `sim_data/caRhoA.npz` | ✅ yes (~4 min of simulation) |
-| `chi0_chi1_scan_analysis.ipynb` | Summarises the χ0–χ1 contractility scan | – | `sim_data/acto_myo/` from `scripts/chi0_chi1_scan.py` | ⚠️ **regenerate first** (see §5) |
-| `param_scan_analysis.ipynb` | Two-component gel scan over χ0, χ1 | ✅ | `sim_data/two_actin/` (self-generates in-notebook) | ⚠️ **heavy scan** (see §5) |
+Notebooks marked **†** require NGSolve (installed via `requirements.txt`); the
+rest use only the pure-Python stack.
 
-The four notebooks in the first block need only committed data and the pure-Python
-stack. The rest use NGSolve; two of them depend on large parameter scans that must
-be regenerated (§5).
+### Run directly from a fresh clone
+
+| Notebook | What it does |
+|---|---|
+| `data_analysis.ipynb` | Actin kymograph and lifeact intensity/position analysis. Reads committed `data/actin_data/`. |
+| `constriction1.ipynb` | Furrow-constriction energetics compared against the measured furrow positions (WT / Ca-free / caRhoA). Reads committed `data/furrow_position_h1_h2/`. |
+| `constriction2.ipynb` | Phase-2 constriction energy landscape and phase diagram. Self-generates `sim_data/constriction/` (a few minutes). |
+| `furrow_width.ipynb` | Depletion-zone width vs. velocity and cable nematic order, from the kymograph TIFFs in committed `data/actin_kymo/`. (An optional simulation overlay from `sim_data/caRhoA.npz` is off by default.) |
+| `active_gel_fem.ipynb` **†** | Base nematic active-gel model (1D/2D): isotropic vs. banded state. Source field defined inline — no external data. |
+| `actin_myo_gel.ipynb` **†** | Coupled actin–myosin gel; 2D furrow kymograph. No external data. |
+| `caRhoA_actin_dynamics.ipynb` **†** | caRhoA perturbation sweep → velocity / depletion-width / nematic-order scaling. Runs ~22 simulations (~4 min) and writes `sim_data/caRhoA.npz`. |
+
+### Need a regenerated parameter scan first (see §5)
+
+| Notebook | What it does |
+|---|---|
+| `chi0_chi1_scan_analysis.ipynb` | Summarises the χ0–χ1 contractility scan. Reads `sim_data/acto_myo/`, produced by `scripts/chi0_chi1_scan.py`. |
+| `param_scan_analysis.ipynb` **†** | Two-component gel scan over χ0, χ1. Its first scan cell generates `sim_data/two_actin/` (large, cluster-scale); later cells read it back. |
 
 ---
 
