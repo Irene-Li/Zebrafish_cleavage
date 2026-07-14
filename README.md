@@ -41,7 +41,7 @@ Cleavage/
 ├── src/                     # models and helpers (added to sys.path by the notebooks)
 │   ├── active_gel_fem.py        # NematicActiveGel 1D/2D/Circle — base single-fluid model
 │   ├── myosin_actin_gel_fem.py  # MyosinActinGel2D — coupled actin+myosin gel
-│   ├── double_fluid_gel_fem.py  # DoubleActinGel2D — two-component gel
+│   ├── double_fluid_gel_fem.py  # DoubleActinGel2D — exploratory two-component gel (not used in the paper)
 │   ├── catch_bond_fem.py        # CatchBond variants (model exploration; not used by a notebook)
 │   ├── constriction.py          # JAX furrow-constriction energy model
 │   └── utils.py                 # source fields, colourbars, 2D plotting/animation helpers
@@ -78,12 +78,11 @@ rest use only the pure-Python stack.
 | `actin_myo_gel.ipynb` **†** | Coupled actin–myosin gel; 2D furrow kymograph. No external data. |
 | `caRhoA_actin_dynamics.ipynb` **†** | caRhoA perturbation sweep → velocity / depletion-width / nematic-order scaling. Runs ~22 simulations (~4 min) and writes `sim_data/caRhoA.npz`. |
 
-### Need a regenerated parameter scan first (see §5)
+### Needs a regenerated scan first (see §5)
 
 | Notebook | What it does |
 |---|---|
 | `chi0_chi1_scan_analysis.ipynb` | Summarises the χ0–χ1 contractility scan. Reads `sim_data/acto_myo/`, produced by `scripts/chi0_chi1_scan.py`. |
-| `param_scan_analysis.ipynb` **†** | Two-component gel scan over χ0, χ1. Its first scan cell generates `sim_data/two_actin/` (large, cluster-scale); later cells read it back. |
 
 ---
 
@@ -99,7 +98,6 @@ rest use only the pure-Python stack.
   | `sim_data/constriction/*.npy` | `constriction2.ipynb` | `notebooks/sim_data/constriction/` |
   | `sim_data/caRhoA.npz` | `caRhoA_actin_dynamics.ipynb` | `notebooks/sim_data/caRhoA.npz` |
   | `sim_data/furrow_width_data.npz` | `furrow_width.ipynb` | `notebooks/sim_data/` |
-  | `sim_data/two_actin/*.npy` | `param_scan_analysis.ipynb` | `notebooks/sim_data/two_actin/` |
   | `sim_data/acto_myo/*.npz` | `scripts/chi0_chi1_scan.py` | `sim_data/acto_myo/` (repo root) |
 
   The scan **script** (`scripts/chi0_chi1_scan.py`) writes to the repo-root
@@ -109,10 +107,10 @@ rest use only the pure-Python stack.
 
 ---
 
-## 5. Reproducing the parameter scans
+## 5. Regenerating simulation data
 
-Two notebooks consume large scans that are **not** stored in the repository. Their
-generating code is included; regenerate before running the analysis. These are
+Some simulation outputs are **not** stored in the repository. Their generating
+code is included; regenerate before running the analysis. The χ0–χ1 scan is
 compute-heavy (originally run on a cluster) — timings below are single-machine
 estimates.
 
@@ -127,14 +125,6 @@ Runs a 50×50 grid of `MyosinActinGel2D` simulations → `sim_data/acto_myo/`
 top of the script to run a coarser, faster grid. Then run
 `chi0_chi1_scan_analysis.ipynb`.
 
-**Two-component gel scan** (for `param_scan_analysis.ipynb`)
-
-The scan runs inside the notebook: the first scan cell loops over a 50×50 χ0–χ1
-grid of `DoubleActinGel2D` simulations (`T = 100` each) and caches results to
-`sim_data/two_actin/`, skipping any file that already exists. This is the
-longest job in the repo; reduce the grid (the `np.linspace(..., 50)` calls) or
-`T` for a quick check. Later cells read the cached `.npy` files back.
-
 **caRhoA summary** (for the optional overlay in `furrow_width.ipynb`)
 
 Run `caRhoA_actin_dynamics.ipynb` end to end (~4 min); it writes
@@ -145,9 +135,9 @@ overlay it feeds is disabled by default.
 
 ## 6. Reproducibility notes
 
-- A fresh venv built from `requirements.txt` runs every notebook; all nine were
-  executed top-to-bottom during preparation (the two large scans above were
-  validated on reduced grids and, for the χ0–χ1 case, against the full dataset).
+- A fresh venv built from `requirements.txt` runs every notebook documented here;
+  each was executed top-to-bottom during preparation (the χ0–χ1 scan was validated
+  both on a reduced grid and against the full dataset).
 - Notebooks add `../src` to `sys.path` themselves, so no installation of the
   `src` package is required.
 - Figure outputs land in `figures/` (git-ignored) and do not need to be committed
