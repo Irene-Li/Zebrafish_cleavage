@@ -1,0 +1,37 @@
+# Python dependencies for the Zebrafish cleavage modelling repository.
+# Tested with Python 3.11 on macOS (Apple Silicon) and Linux.
+#
+# Install into a fresh virtual environment:
+#     python3.11 -m venv .venv
+#     source .venv/bin/activate
+#     pip install -r requirements.txt
+
+# --- core scientific stack ---
+numpy==1.26.4
+scipy==1.15.2
+matplotlib==3.9.3
+
+# --- finite-element models (src/*_fem.py, most notebooks) ---
+# ngsolve ships the netgen mesher as a dependency.
+ngsolve==6.2.2604
+webgui_jupyter_widgets      # provides ngsolve.webgui.Draw inside notebooks
+
+# --- JAX constriction model (src/constriction.py, constriction[12].ipynb) ---
+jax==0.4.26
+jaxlib==0.4.26
+diffrax==0.5.1
+optax==0.2.2
+
+# --- image / data analysis notebooks ---
+opencv-python==4.10.0.84    # cv2, used by src/utils.py
+scikit-image==0.24.0        # skimage.io.imread, furrow_width.ipynb
+tifffile==2023.8.12         # TIFF backend for scikit-image
+plotly==5.24.1              # constriction2.ipynb 3D surface
+
+# --- utilities ---
+tqdm==4.67.1
+
+# --- running the notebooks ---
+jupyter
+nbconvert
+ipykernel
